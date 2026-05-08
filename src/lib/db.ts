@@ -46,8 +46,22 @@ export class SchedulerDB extends Dexie {
   }
 }
 
-/** Shared singleton database instance */
-export const db = new SchedulerDB();
+/** Shared singleton database instance — lazily created */
+let _db: SchedulerDB | null = null;
+
+export function getDb(): SchedulerDB {
+  if (!_db) {
+    _db = new SchedulerDB();
+  }
+  return _db;
+}
+
+// Re-export for convenience
+export const db = new Proxy({} as SchedulerDB, {
+  get(_target, prop) {
+    return getDb()[prop as keyof SchedulerDB];
+  },
+});
 
 // ---------------------------------------------------------------------------
 // CRUD helpers – Projects
