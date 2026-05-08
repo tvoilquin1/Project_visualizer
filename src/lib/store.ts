@@ -375,12 +375,44 @@ export const useStore = create<SchedulerState>()(
       },
 
       reorderTask: (taskId: string, newOrder: number) => {
-        set((state) => ({
-          tasks: state.tasks.map((t) =>
-            t.id === taskId ? { ...t, order: newOrder } : t,
-          ),
+        // Get the task being reordered to find its parentTaskId
+        const state = get();
+        const task = state.tasks.find((t) => t.id === taskId);
+        if (!task) return;
+
+        // Find all siblings (same projectId + same parentTaskId)
+        const siblings = state.tasks
+          .filter(
+            (t) =>
+              t.projectId === task.projectId &&
+              (t.parentTaskId ?? null) === (task.parentTaskId ?? null),
+          )
+          .sort((a, b) => a.order - b.order);
+
+        const oldIndex = siblings.findIndex((t) => t.id === taskId);
+        if (oldIndex === -1) return;
+
+        // Reorder the array
+        const reordered = [...siblings];
+        const [moved] = reordered.splice(oldIndex, 1);
+        if (!moved) return;
+        reordered.splice(newOrder, 0, moved);
+
+        // Re-assign sequential order values and update
+        const updatedTasks = reordered.map((t, i) => ({ ...t, order: i }));
+        const taskUpdates = updatedTasks.map((t) => ({ id: t.id, order: t.order }));
+
+        set((s) => ({
+          tasks: s.tasks.map((t) => {
+            const update = taskUpdates.find((u) => u.id === t.id);
+            return update ? { ...t, order: update.order } : t;
+          }),
         }));
-        dbUpdateTask(taskId, { order: newOrder });
+
+        // Persist to Dexie (fire-and-forget for all siblings)
+        for (const u of taskUpdates) {
+          dbUpdateTask(u.id, { order: u.order });
+        }
       },
 
       // ---- Calendar Events ----

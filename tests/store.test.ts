@@ -307,15 +307,32 @@ describe('Store actions', () => {
     it('reorderTask should update order', async () => {
       const state = getState();
       const projectId = await state.createProject('Test', []);
-      const taskId = await state.createTask({
+      const taskA = await state.createTask({
         projectId,
-        title: 'Task',
+        title: 'Task A',
         order: 0,
       });
+      const taskB = await state.createTask({
+        projectId,
+        title: 'Task B',
+        order: 1,
+      });
+      const taskC = await state.createTask({
+        projectId,
+        title: 'Task C',
+        order: 2,
+      });
 
-      state.reorderTask(taskId, 5);
+      // Move taskC (order 2) to position 0
+      state.reorderTask(taskC, 0);
 
-      expect(getState().tasks[0]!.order).toBe(5);
+      const tasks = getState().tasks;
+      const tA = tasks.find((t) => t.id === taskA)!;
+      const tB = tasks.find((t) => t.id === taskB)!;
+      const tC = tasks.find((t) => t.id === taskC)!;
+      expect(tC.order).toBe(0);
+      expect(tA.order).toBe(1);
+      expect(tB.order).toBe(2);
     });
   });
 
