@@ -31,6 +31,8 @@ export function ProjectSidebar() {
   return (
     <>
       <aside
+        role="navigation"
+        aria-label="Project sidebar"
         className="flex flex-col border-r border-border bg-sidebar text-sidebar-foreground overflow-y-auto"
         style={{
           width: "var(--sidebar-width, 260px)",
@@ -63,18 +65,20 @@ export function ProjectSidebar() {
             Other Projects
           </h2>
           {otherProjects.length > 0 ? (
-            <div className="space-y-0.5">
+            <div className="space-y-0.5" role="list" aria-label="Other projects">
               {otherProjects.map((p) => (
-                <button
-                  key={p.id}
-                  className="w-full text-left"
-                  onClick={() => switchProject(p.id)}
-                >
-                  <ProjectListItem
-                    name={p.name}
-                    color={p.parties[0]?.color ?? "#6366f1"}
-                  />
-                </button>
+                <div key={p.id} role="listitem">
+                  <button
+                    className="w-full text-left"
+                    onClick={() => switchProject(p.id)}
+                    aria-label={`Switch to project: ${p.name}`}
+                  >
+                    <ProjectListItem
+                      name={p.name}
+                      color={p.parties[0]?.color ?? "#6366f1"}
+                    />
+                  </button>
+                </div>
               ))}
             </div>
           ) : (
@@ -101,6 +105,7 @@ export function ProjectSidebar() {
             size="sm"
             className="w-full justify-start gap-2 text-xs"
             onClick={() => setDialogOpen(true)}
+            aria-label="Create new project"
           >
             <Plus className="size-3.5" />
             New Project

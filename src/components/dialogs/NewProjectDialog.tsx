@@ -79,11 +79,11 @@ function ColorPicker({
         <button
           key={c}
           type="button"
-          className="size-5 rounded-full border-2 border-transparent transition-all hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="size-5 rounded-full border-2 border-transparent transition-all hover:scale-110 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
           style={{
             backgroundColor: c,
             borderColor: c === value ? "var(--color-ring)" : "transparent",
-            outline: c === value ? "2px solid hsl(var(--ring) / 0.4)" : undefined,
+            outline: c === value ? "2px solid oklch(0.708 0 0 / 0.4)" : undefined,
           }}
           onClick={() => onChange(c)}
           aria-label={`Select color ${c}`}
@@ -207,7 +207,7 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
           {parties.map((party, index) => (
             <div
               key={party.id}
-              className="flex items-start gap-2 rounded-lg border border-border p-2.5"
+              className="flex items-start gap-2 rounded-lg border border-border p-2.5 shadow-sm"
             >
               {/* Party name */}
               <div className="flex-1 space-y-1.5">

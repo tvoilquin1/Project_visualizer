@@ -40,18 +40,23 @@ export function TimelineHeader({ workdays, today }: TimelineHeaderProps) {
     <div
       className="sticky top-0 z-10 bg-background flex-shrink-0"
       style={{ minWidth: workdays.length * 40 }}
+      role="rowgroup"
+      aria-label="Timeline header"
     >
       {/* Month boundary row */}
-      <div className="flex h-5" style={{ width: workdays.length * 40 }}>
+      <div className="flex h-5" role="row" style={{ width: workdays.length * 40 }}>
         {workdays.map((date, i) => {
           const label = monthLabels.get(i);
           const isBoundary = boundaryDates.has(date);
           return (
-            <div key={date} className="relative flex-shrink-0" style={{ width: 40 }}>
+            <div key={date} className="relative flex-shrink-0" style={{ width: 40 }} role="cell">
               {isBoundary && label && (
                 <>
                   <div className="absolute left-0 top-0 bottom-0 w-px bg-border" />
-                  <span className="absolute left-1.5 top-0 text-[10px] font-medium text-muted-foreground leading-tight whitespace-nowrap">
+                  <span
+                    className="absolute left-1.5 top-0 text-[10px] font-medium text-muted-foreground leading-tight whitespace-nowrap"
+                    aria-label={`New month: ${label}`}
+                  >
                     {label}
                   </span>
                 </>
@@ -62,7 +67,7 @@ export function TimelineHeader({ workdays, today }: TimelineHeaderProps) {
       </div>
 
       {/* Day name + date row */}
-      <div className="flex h-8 border-b border-border" style={{ width: workdays.length * 40 }}>
+      <div className="flex h-8 border-b border-border" role="row" style={{ width: workdays.length * 40 }}>
         {workdays.map((date) => {
           const isToday = date === today;
           const dayName = format(new Date(date), "EEE");
@@ -70,9 +75,15 @@ export function TimelineHeader({ workdays, today }: TimelineHeaderProps) {
           return (
             <div
               key={date}
-              className={`flex-shrink-0 flex flex-col items-center justify-center border-r border-border/50 ${isToday ? "bg-accent/20" : ""}`}
+              className={`flex-shrink-0 flex flex-col items-center justify-center border-r border-border/50 ${isToday ? "bg-accent/15 relative" : ""}`}
               style={{ width: 40, height: 32 }}
+              role="cell"
+              aria-label={`${dayName} ${dayNum}${isToday ? ", today" : ""}`}
+              aria-current={isToday ? "date" : undefined}
             >
+              {isToday && (
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-5 h-0.5 bg-accent rounded-full" />
+              )}
               <span className={`text-[10px] leading-tight ${isToday ? "text-primary font-semibold" : "text-muted-foreground"}`}>
                 {dayName}
               </span>

@@ -25,7 +25,8 @@ export function ProjectListItem({
         "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm transition-colors",
         isActive
           ? "bg-accent text-accent-foreground font-medium"
-          : "hover:bg-muted text-foreground"
+          : "hover:bg-muted text-foreground",
+        "focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
       )}
       onClick={() => {/* placeholder: select project */}}
     >

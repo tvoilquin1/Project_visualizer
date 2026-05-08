@@ -7,6 +7,7 @@ import type { ISODate } from "@/lib/types";
 import { TimelineHeader } from "@/components/scheduler/TimelineHeader";
 import { DescriptionColumn } from "@/components/scheduler/DescriptionColumn";
 import { EmptyState } from "@/components/empty-state";
+import { TimelineSkeleton } from "@/components/skeleton";
 import type { TaskLabel } from "@/components/scheduler/DescriptionColumn";
 
 // ---------------------------------------------------------------------------
@@ -33,6 +34,8 @@ export interface TimelineProps {
   collapsedIds?: string[];
   /** Toggle collapse callback */
   onToggleCollapse?: (taskId: string) => void;
+  /** Whether the data is still loading */
+  loading?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,6 +87,7 @@ export function Timeline({
   labels = [],
   collapsedIds = [],
   onToggleCollapse,
+  loading = false,
 }: TimelineProps) {
   const today = useMemo(() => todayISO(), []);
 
@@ -96,11 +100,14 @@ export function Timeline({
   const bodyRef = useRef<HTMLDivElement>(null);
   const timelineGridRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to today on mount
+  // Scroll to today on mount with smooth behavior
   useEffect(() => {
     const idx = workdays.indexOf(today);
     if (idx !== -1 && bodyRef.current) {
-      bodyRef.current.scrollLeft = Math.max(0, idx * 40 - 8);
+      bodyRef.current.scrollTo({
+        left: Math.max(0, idx * 40 - 8),
+        behavior: "smooth",
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -192,7 +199,8 @@ export function Timeline({
     if (todayColIndex === -1) return null;
     return (
       <div
-        className="absolute top-0 bottom-0 w-px bg-accent/60 pointer-events-none z-5"
+        data-today-col="true"
+        className="absolute top-0 bottom-0 w-0.5 bg-accent/70 pointer-events-none z-5 shadow-[0_0_6px_rgba(59,130,246,0.3)]"
         style={{ left: todayColIndex * 40 }}
       />
     );
@@ -252,6 +260,12 @@ export function Timeline({
     });
   };
 
+  // --- Loading state ---
+
+  if (loading) {
+    return <TimelineSkeleton />;
+  }
+
   // --- Empty state ---
 
   if (!hasActiveProject) {
@@ -292,7 +306,12 @@ export function Timeline({
           onToggleCollapse={(id) => onToggleCollapse?.(id)}
         />
 
-        <div ref={bodyRef} className="overflow-auto flex-1" onScroll={onScroll}>
+        <div
+          ref={bodyRef}
+          className="overflow-auto flex-1"
+          onScroll={onScroll}
+          data-timeline-body="true"
+        >
           <div
             ref={timelineGridRef}
             className="relative"

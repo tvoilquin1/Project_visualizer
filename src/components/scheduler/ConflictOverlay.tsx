@@ -63,8 +63,10 @@ export function ConflictOverlay({
               style={{
                 left: `${left * 40}px`,
                 width: `${width * 40}px`,
-                background: conflictStyle,
+                background: `repeating-linear-gradient(-45deg, transparent, transparent 3px, #ef4444 3px, #ef4444 5px)`,
                 opacity: 0.45,
+                borderRadius: "inherit",
+                boxShadow: "inset 0 0 8px rgba(239,68,68,0.2)",
               }}
             />
             <TooltipContent side="top" align="center">

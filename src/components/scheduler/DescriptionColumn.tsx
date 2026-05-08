@@ -53,7 +53,7 @@ export function DescriptionColumn({
             return (
               <div
                 key={item.id}
-                className="flex items-center gap-1.5 border-b border-border/50 hover:bg-muted/30 cursor-pointer transition-colors"
+                className="flex items-center gap-1.5 border-b border-border/50 hover:bg-muted/30 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px]"
                 style={{
                   height: "var(--cell-height)",
                   paddingLeft: `${12 + item.depth * 16}px`,

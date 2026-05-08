@@ -45,8 +45,8 @@
   --neutral-950: #09090b;
 
   /* ---- Semantic colors ------------------------------------------------- */
-  --accent: oklch(0.97 0 0);        /* blue-500 */
-  --accent-foreground: oklch(0.205 0 0);
+  --accent: oklch(0.62 0.19 260);   /* blue-500 */
+  --accent-foreground: oklch(1 0 0);
   --success: #22c55e;       /* green-500 */
   --success-foreground: #ffffff;
   --warning: #f59e0b;       /* amber-500 */
@@ -62,7 +62,7 @@
   --border: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
 
-  /* ---- Shadows (soft) ------------------------------------------------- */
+/* ---- Shadows (soft) ------------------------------------------------- */
   --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.03);
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 3px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.06), 0 2px 4px -2px rgb(0 0 0 / 0.05);
@@ -133,13 +133,18 @@
   --neutral-900: #f4f4f5;
   --neutral-950: #fafafa;
 
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --border: oklch(1 0 0 / 10%);
+    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.35), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.45), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.3);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.922 0 0);
@@ -277,6 +282,26 @@ body {
     @apply bg-background text-foreground;
   }
   html {
-    @apply font-sans;
+    @apply font-sans transition-colors duration-[var(--duration-medium)] ease-[var(--ease-standard)];
   }
+}
+
+/* =========================================================================
+   Animations
+   ========================================================================= */
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 25%,
+    var(--muted-foreground) 37%,
+    var(--muted) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
 }

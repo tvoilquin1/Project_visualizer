@@ -17,6 +17,7 @@ export interface TaskBarProps {
   hasConflict?: boolean;
   conflictMessages?: string[];
   isActive?: boolean;
+  isDragGhost?: boolean;
 }
 
 /**
@@ -36,6 +37,7 @@ export function TaskBar({
   hasConflict = false,
   conflictMessages = [],
   isActive = false,
+  isDragGhost = false,
 }: TaskBarProps) {
   const isUnassigned = !partyColor;
   const barColor = isUnassigned ? undefined : partyColor;
@@ -48,6 +50,7 @@ export function TaskBar({
       <Tooltip>
         <TooltipTrigger
           data-role="button"
+          data-taskbar="true"
           tabIndex={0}
           aria-label={`${task.title}, ${dateLabel}${hasConflict ? ", has scheduling conflicts" : ""}`}
           className={cn(
@@ -58,7 +61,7 @@ export function TaskBar({
             // Reset button styles
             "appearance-none border-0 p-0 text-left",
             // Visual
-            "transition-all duration-150 ease-standard",
+            "transition-all duration-[var(--duration-fast)] ease-[var(--ease-standard)]",
             // Colors — unassigned gets neutral
             isUnassigned
               ? "bg-neutral-400/70 border border-neutral-400"
@@ -66,7 +69,9 @@ export function TaskBar({
             // Active / hover states
             isActive
               ? "scale-102 shadow-md z-20"
-              : "hover:scale-102 hover:shadow-md hover:z-20",
+              : "hover:scale-102 hover:shadow-lg hover:z-20",
+            // Drag ghost state
+            isDragGhost ? "opacity-70 scale-102 shadow-lg" : "",
             // Focus visible ring
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
             // Cursor
@@ -86,7 +91,17 @@ export function TaskBar({
             className="absolute inset-x-0 top-0 h-1/2 rounded-t-md pointer-events-none"
             style={{
               background: barColor
-                ? `linear-gradient(to bottom, rgba(255,255,255,0.15), transparent)`
+                ? `linear-gradient(to bottom, rgba(255,255,255,0.18), transparent)`
+                : undefined,
+            }}
+          />
+
+          {/* Inner shadow at bottom for depth (only on colored bars) */}
+          <div
+            className="absolute inset-x-0 bottom-0 h-1/3 rounded-b-md pointer-events-none"
+            style={{
+              background: barColor
+                ? `linear-gradient(to top, rgba(0,0,0,0.08), transparent)`
                 : undefined,
             }}
           />
@@ -115,8 +130,8 @@ export function TaskBar({
           )}
 
           {/* Resize handles — visible on group hover */}
-          <div className="absolute inset-y-0 left-0 w-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity cursor-col-resize bg-white/20 rounded-l-md pointer-events-auto" />
-          <div className="absolute inset-y-0 right-0 w-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity cursor-col-resize bg-white/20 rounded-r-md pointer-events-auto" />
+          <div className="absolute inset-y-0 left-0 w-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity duration-[var(--duration-fast)] cursor-col-resize bg-white/20 rounded-l-md pointer-events-auto" />
+          <div className="absolute inset-y-0 right-0 w-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity duration-[var(--duration-fast)] cursor-col-resize bg-white/20 rounded-r-md pointer-events-auto" />
         </TooltipTrigger>
         <TooltipContent side="top" align="center" className="max-w-xs">
           <div className="flex flex-col gap-0.5 text-xs">
