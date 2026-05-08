@@ -46,9 +46,13 @@ export class SchedulerDB extends Dexie {
   }
 }
 
-/** Shared singleton database instance — lazily created */
+// ---------------------------------------------------------------------------
+// Lazy singleton — Dexie is imported but only instantiated client-side
+// ---------------------------------------------------------------------------
+
 let _db: SchedulerDB | null = null;
 
+/** Returns the shared Dexie instance, creating it lazily on first call. */
 export function getDb(): SchedulerDB {
   if (!_db) {
     _db = new SchedulerDB();
@@ -56,10 +60,10 @@ export function getDb(): SchedulerDB {
   return _db;
 }
 
-// Re-export for convenience
+/** Re-export for convenience — also lazy via getDb() */
 export const db = new Proxy({} as SchedulerDB, {
-  get(_target, prop) {
-    return getDb()[prop as keyof SchedulerDB];
+  get(_, prop) {
+    return (getDb() as any)[prop];
   },
 });
 
@@ -68,16 +72,16 @@ export const db = new Proxy({} as SchedulerDB, {
 // ---------------------------------------------------------------------------
 
 export async function getAllProjects(): Promise<Project[]> {
-  return db.projects.toArray();
+  return getDb().projects.toArray();
 }
 
 export async function getProject(id: string): Promise<Project | undefined> {
-  return db.projects.get(id);
+  return getDb().projects.get(id);
 }
 
 export async function createProject(data: Project): Promise<string> {
   projectSchema.parse(data);
-  await db.projects.add(data);
+  await getDb().projects.add(data);
   return data.id;
 }
 
@@ -85,28 +89,33 @@ export async function updateProject(
   id: string,
   data: Partial<Project>,
 ): Promise<void> {
-  await db.projects.update(id, data);
+  await getDb().projects.update(id, data);
 }
 
 export async function deleteProject(id: string): Promise<void> {
   // Cascade: remove parties, tasks, meetings belonging to this project
-  await db.parties.where('projectId').equals(id).delete();
-  await db.tasks.where('projectId').equals(id).delete();
-  await db.meetings.where('projectId').equals(id).delete();
-  await db.projects.delete(id);
+  await getDb().parties.where('projectId').equals(id).delete();
+  await getDb().tasks.where('projectId').equals(id).delete();
+  await getDb().meetings.where('projectId').equals(id).delete();
+  await getDb().projects.delete(id);
 }
 
 // ---------------------------------------------------------------------------
 // CRUD helpers – Parties
 // ---------------------------------------------------------------------------
 
+/** Returns ALL parties across all projects */
+export async function getAllParties(): Promise<Party[]> {
+  return getDb().parties.toArray();
+}
+
 export async function getParties(projectId: string): Promise<Party[]> {
-  return db.parties.where('projectId').equals(projectId).toArray();
+  return getDb().parties.where('projectId').equals(projectId).toArray();
 }
 
 export async function createParty(data: Party): Promise<string> {
   partySchema.parse(data);
-  await db.parties.add(data);
+  await getDb().parties.add(data);
   return data.id;
 }
 
@@ -114,28 +123,33 @@ export async function updateParty(
   id: string,
   data: Partial<Party>,
 ): Promise<void> {
-  await db.parties.update(id, data);
+  await getDb().parties.update(id, data);
 }
 
 export async function deleteParty(id: string): Promise<void> {
-  await db.parties.delete(id);
+  await getDb().parties.delete(id);
 }
 
 // ---------------------------------------------------------------------------
 // CRUD helpers – Tasks
 // ---------------------------------------------------------------------------
 
+/** Returns ALL tasks across all projects */
+export async function getAllTasks(): Promise<Task[]> {
+  return getDb().tasks.toArray();
+}
+
 export async function getTasks(projectId: string): Promise<Task[]> {
-  return db.tasks.where('projectId').equals(projectId).toArray();
+  return getDb().tasks.where('projectId').equals(projectId).toArray();
 }
 
 export async function getSubTasks(parentTaskId: string): Promise<Task[]> {
-  return db.tasks.where('parentTaskId').equals(parentTaskId).toArray();
+  return getDb().tasks.where('parentTaskId').equals(parentTaskId).toArray();
 }
 
 export async function createTask(data: Task): Promise<string> {
   taskSchema.parse(data);
-  await db.tasks.add(data);
+  await getDb().tasks.add(data);
   return data.id;
 }
 
@@ -143,13 +157,13 @@ export async function updateTask(
   id: string,
   data: Partial<Task>,
 ): Promise<void> {
-  await db.tasks.update(id, data);
+  await getDb().tasks.update(id, data);
 }
 
 export async function deleteTask(id: string): Promise<void> {
   // Delete sub-tasks first
-  await db.tasks.where('parentTaskId').equals(id).delete();
-  await db.tasks.delete(id);
+  await getDb().tasks.where('parentTaskId').equals(id).delete();
+  await getDb().tasks.delete(id);
 }
 
 // ---------------------------------------------------------------------------
@@ -157,14 +171,14 @@ export async function deleteTask(id: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function getCalendarEvents(): Promise<CalendarEvent[]> {
-  return db.calendarEvents.toArray();
+  return getDb().calendarEvents.toArray();
 }
 
 export async function createCalendarEvent(
   data: CalendarEvent,
 ): Promise<string> {
   calendarEventSchema.parse(data);
-  await db.calendarEvents.add(data);
+  await getDb().calendarEvents.add(data);
   return data.id;
 }
 
@@ -172,11 +186,11 @@ export async function updateCalendarEvent(
   id: string,
   data: Partial<CalendarEvent>,
 ): Promise<void> {
-  await db.calendarEvents.update(id, data);
+  await getDb().calendarEvents.update(id, data);
 }
 
 export async function deleteCalendarEvent(id: string): Promise<void> {
-  await db.calendarEvents.delete(id);
+  await getDb().calendarEvents.delete(id);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,12 +198,12 @@ export async function deleteCalendarEvent(id: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function getMeetings(projectId: string): Promise<Meeting[]> {
-  return db.meetings.where('projectId').equals(projectId).toArray();
+  return getDb().meetings.where('projectId').equals(projectId).toArray();
 }
 
 export async function createMeeting(data: Meeting): Promise<string> {
   meetingSchema.parse(data);
-  await db.meetings.add(data);
+  await getDb().meetings.add(data);
   return data.id;
 }
 
@@ -197,11 +211,11 @@ export async function updateMeeting(
   id: string,
   data: Partial<Meeting>,
 ): Promise<void> {
-  await db.meetings.update(id, data);
+  await getDb().meetings.update(id, data);
 }
 
 export async function deleteMeeting(id: string): Promise<void> {
-  await db.meetings.delete(id);
+  await getDb().meetings.delete(id);
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +223,7 @@ export async function deleteMeeting(id: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function getSettings(): Promise<AppSettings | undefined> {
-  return db.settings.get('singleton');
+  return getDb().settings.get('singleton');
 }
 
 export async function updateSettings(
@@ -217,7 +231,7 @@ export async function updateSettings(
 ): Promise<void> {
   const existing = await getSettings();
   if (existing) {
-    await db.settings.update('singleton', data);
+    await getDb().settings.update('singleton', data);
   } else {
     const defaults: AppSettings = {
       id: 'singleton',
@@ -226,6 +240,6 @@ export async function updateSettings(
       weekendsHidden: true,
     };
     appSettingsSchema.parse({ ...defaults, ...data });
-    await db.settings.add({ ...defaults, ...data } as AppSettings);
+    await getDb().settings.add({ ...defaults, ...data } as AppSettings);
   }
 }

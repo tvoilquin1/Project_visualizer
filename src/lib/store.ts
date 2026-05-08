@@ -16,10 +16,9 @@ import type {
   ID,
 } from './types';
 import {
-  db,
   getAllProjects,
-  getParties,
-  getTasks,
+  getAllParties,
+  getAllTasks,
   getCalendarEvents,
   getMeetings,
   getSettings,
@@ -33,13 +32,13 @@ import {
   updateTask as dbUpdateTask,
   deleteTask as dbDeleteTask,
   createCalendarEvent as dbCreateCalendarEvent,
+  updateCalendarEvent as dbUpdateCalendarEvent,
   deleteCalendarEvent as dbDeleteCalendarEvent,
   createMeeting as dbCreateMeeting,
   updateMeeting as dbUpdateMeeting,
   deleteMeeting as dbDeleteMeeting,
   updateSettings as dbUpdateSettings,
 } from './db';
-
 // ---------------------------------------------------------------------------
 // Store state shape
 // ---------------------------------------------------------------------------
@@ -165,10 +164,10 @@ export const useStore = create<SchedulerState>()(
           const [projects, allParties, allTasks, calendarEvents, meetings, settings] =
             await Promise.all([
               getAllProjects(),
-              db.parties.toArray(),
-              db.tasks.toArray(),
+              getAllParties(),
+              getAllTasks(),
               getCalendarEvents(),
-              db.meetings.toArray(),
+              getMeetings(''),
               getSettings(),
             ]);
 
