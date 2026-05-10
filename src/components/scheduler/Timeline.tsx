@@ -8,6 +8,7 @@ import { TimelineHeader } from "@/components/scheduler/TimelineHeader";
 import { DescriptionColumn } from "@/components/scheduler/DescriptionColumn";
 import { EmptyState } from "@/components/empty-state";
 import { TimelineSkeleton } from "@/components/skeleton";
+import { TaskContextMenu } from "@/components/scheduler/TaskContextMenu";
 import type { TaskLabel } from "@/components/scheduler/DescriptionColumn";
 
 // ---------------------------------------------------------------------------
@@ -36,6 +37,13 @@ export interface TimelineProps {
   onToggleCollapse?: (taskId: string) => void;
   /** Whether the data is still loading */
   loading?: boolean;
+  /** Task interaction callbacks */
+  onAddSubtask?: (parentTaskId: string) => void;
+  onEditTask?: (taskId: string) => void;
+  onDeleteTask?: (taskId: string) => void;
+  onDragCreate?: (startDate: string, endDate: string) => void;
+  /** Called when the empty-state "New Project" button is clicked */
+  onCreateProject?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -45,6 +53,8 @@ export interface TimelineProps {
 const WEEKS_BACK = 6;
 const WEEKS_FORWARD = 6;
 const SCROLL_THRESHOLD = 100; // px from edge to trigger load more
+const COL_WIDTH = 40;
+const HEADER_HEIGHT = 52; // TimelineHeader: h-5 (20px month row) + h-8 (32px day row)
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,10 +64,6 @@ function todayISO(): ISODate {
   return format(new Date(), "yyyy-MM-dd");
 }
 
-/**
- * Compute the start column index for a task bar (0-based, within the workday window).
- * Returns -1 if the task has no start date.
- */
 function getTaskStartCol(task: TimelineTask, workdays: ISODate[]): number {
   if (!task.start) return -1;
   for (let i = 0; i < workdays.length; i++) {
@@ -66,15 +72,25 @@ function getTaskStartCol(task: TimelineTask, workdays: ISODate[]): number {
   return workdays.length;
 }
 
-/**
- * Compute the end column index for a task bar (exclusive end).
- */
 function getTaskEndCol(task: TimelineTask, workdays: ISODate[]): number {
   if (!task.end) return -1;
   for (let i = 0; i < workdays.length; i++) {
     if (workdays[i]! > task.end) return i;
   }
   return workdays.length;
+}
+
+// Depth-based colors for task bars
+const DEPTH_COLORS = [
+  { bg: "rgba(99, 102, 241, 0.25)", border: "rgba(99, 102, 241, 0.5)", text: "rgb(99, 102, 241)" },
+  { bg: "rgba(34, 197, 94, 0.25)", border: "rgba(34, 197, 94, 0.5)", text: "rgb(34, 197, 94)" },
+  { bg: "rgba(234, 179, 8, 0.25)", border: "rgba(234, 179, 8, 0.5)", text: "rgb(180, 140, 10)" },
+  { bg: "rgba(168, 85, 247, 0.25)", border: "rgba(168, 85, 247, 0.5)", text: "rgb(168, 85, 247)" },
+  { bg: "rgba(236, 72, 153, 0.25)", border: "rgba(236, 72, 153, 0.5)", text: "rgb(236, 72, 153)" },
+];
+
+function getDepthColor(depth: number) {
+  return DEPTH_COLORS[depth % DEPTH_COLORS.length]!;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +104,11 @@ export function Timeline({
   collapsedIds = [],
   onToggleCollapse,
   loading = false,
+  onAddSubtask,
+  onEditTask,
+  onDeleteTask,
+  onDragCreate,
+  onCreateProject,
 }: TimelineProps) {
   const today = useMemo(() => todayISO(), []);
 
@@ -96,16 +117,40 @@ export function Timeline({
     generateWeekWindow(today, WEEKS_BACK, WEEKS_FORWARD),
   );
 
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    open: boolean;
+    taskId: string;
+    taskTitle: string;
+    position: { x: number; y: number };
+  }>({
+    open: false,
+    taskId: "",
+    taskTitle: "",
+    position: { x: 0, y: 0 },
+  });
+
+  // Drag-to-create state
+  const [dragState, setDragState] = useState<{
+    active: boolean;
+    startCol: number;
+    currentCol: number;
+  }>({
+    active: false,
+    startCol: 0,
+    currentCol: 0,
+  });
+
   // Refs
   const bodyRef = useRef<HTMLDivElement>(null);
   const timelineGridRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to today on mount with smooth behavior
+  // Scroll to today on mount
   useEffect(() => {
     const idx = workdays.indexOf(today);
     if (idx !== -1 && bodyRef.current) {
       bodyRef.current.scrollTo({
-        left: Math.max(0, idx * 40 - 8),
+        left: Math.max(0, idx * COL_WIDTH - 200),
         behavior: "smooth",
       });
     }
@@ -119,7 +164,6 @@ export function Timeline({
 
     const { scrollLeft, scrollWidth, clientWidth } = el;
 
-    // Near left edge — load more backward
     if (scrollLeft < SCROLL_THRESHOLD && workdays.length > 0) {
       const earliest = workdays[0]!;
       const newDays: ISODate[] = [];
@@ -130,11 +174,10 @@ export function Timeline({
       }
       setWorkdays((prev) => [...newDays, ...prev]);
       requestAnimationFrame(() => {
-        if (el) el.scrollLeft = scrollLeft + newDays.length * 40;
+        if (el) el.scrollLeft = scrollLeft + newDays.length * COL_WIDTH;
       });
     }
 
-    // Near right edge — load more forward
     if (scrollLeft + clientWidth > scrollWidth - SCROLL_THRESHOLD && workdays.length > 0) {
       const latest = workdays[workdays.length - 1]!;
       const newDays: ISODate[] = [];
@@ -147,7 +190,6 @@ export function Timeline({
     }
   }, [workdays]);
 
-  // Debounced scroll handler
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onScroll = useCallback(() => {
     if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
@@ -160,10 +202,8 @@ export function Timeline({
     };
   }, []);
 
-  // Today column index
   const todayColIndex = useMemo(() => workdays.indexOf(today), [workdays, today]);
 
-  // Month boundaries for vertical lines
   const monthBoundarySet = useMemo(() => {
     const boundaries = new Set<number>();
     if (workdays.length === 0) return boundaries;
@@ -178,96 +218,87 @@ export function Timeline({
     return boundaries;
   }, [workdays]);
 
-  // --- Render helpers ---
+  // Content height: header + all task rows (or minimum)
+  const contentHeight = Math.max(200, HEADER_HEIGHT + tasks.length * 32);
 
-  const renderGridLines = () => (
-    <div className="flex" style={{ width: workdays.length * 40, height: "100%" }}>
-      {workdays.map((date, i) => {
-        const isBoundary = monthBoundarySet.has(i);
-        return (
-          <div
-            key={date}
-            className={`flex-shrink-0 border-r border-border/30 ${isBoundary ? "border-l border-l-border" : ""}`}
-            style={{ width: 40 }}
-          />
-        );
-      })}
-    </div>
+  // --- Context menu handlers ---
+  const handleTaskContextMenu = useCallback(
+    (e: React.MouseEvent, taskId: string, taskTitle: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setContextMenu({
+        open: true,
+        taskId,
+        taskTitle,
+        position: { x: e.clientX, y: e.clientY },
+      });
+    },
+    []
   );
 
-  const renderTodayLine = () => {
-    if (todayColIndex === -1) return null;
-    return (
-      <div
-        data-today-col="true"
-        className="absolute top-0 bottom-0 w-0.5 bg-accent/70 pointer-events-none z-5 shadow-[0_0_6px_rgba(59,130,246,0.3)]"
-        style={{ left: todayColIndex * 40 }}
-      />
-    );
-  };
+  const handleTaskDoubleClick = useCallback(
+    (taskId: string) => {
+      onEditTask?.(taskId);
+    },
+    [onEditTask]
+  );
 
-  const renderTaskRows = () => {
-    if (tasks.length === 0) {
-      return (
-        <div
-          className="flex items-center justify-center text-xs text-muted-foreground h-20"
-          style={{ width: workdays.length * 40 }}
-        >
-          No tasks scheduled yet
-        </div>
-      );
-    }
+  // --- Drag-to-create handlers ---
+  const handleGridPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.button !== 0) return;
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-task-bar]")) return;
 
-    return tasks.map((task) => {
-      const startCol = getTaskStartCol(task, workdays);
-      const endCol = getTaskEndCol(task, workdays);
+      const container = timelineGridRef.current;
+      if (!container) return;
 
-      let barStart = 0;
-      let barWidth = 0;
-      if (startCol !== -1 && endCol !== -1 && startCol < workdays.length && endCol > 0) {
-        const clampedStart = Math.max(0, startCol);
-        const clampedEnd = Math.min(workdays.length, endCol);
-        barStart = clampedStart * 40;
-        barWidth = Math.max(4, (clampedEnd - clampedStart) * 40);
+      const rect = container.getBoundingClientRect();
+      const px = e.clientX - rect.left + container.scrollLeft;
+      const col = Math.max(0, Math.min(Math.floor(px / COL_WIDTH), workdays.length - 1));
+
+      setDragState({ active: true, startCol: col, currentCol: col });
+      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    },
+    [workdays.length]
+  );
+
+  const handleGridPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!dragState.active) return;
+      const container = timelineGridRef.current;
+      if (!container) return;
+
+      const rect = container.getBoundingClientRect();
+      const px = e.clientX - rect.left + container.scrollLeft;
+      const col = Math.max(0, Math.min(Math.floor(px / COL_WIDTH), workdays.length - 1));
+      setDragState((prev) => ({ ...prev, currentCol: col }));
+    },
+    [dragState.active, workdays.length]
+  );
+
+  const handleGridPointerUp = useCallback(
+    () => {
+      if (!dragState.active) return;
+
+      const startCol = Math.min(dragState.startCol, dragState.currentCol);
+      const endCol = Math.max(dragState.startCol, dragState.currentCol);
+
+      if (endCol > startCol && workdays[startCol] && workdays[endCol]) {
+        onDragCreate?.(workdays[startCol]!, workdays[endCol]!);
       }
 
-      return (
-        <div
-          key={task.id}
-          className="flex items-center border-b border-border/50 relative"
-          style={{
-            height: "var(--cell-height)",
-            width: workdays.length * 40,
-          }}
-        >
-          {barWidth > 0 && (
-            <div
-              className="absolute h-5 rounded-sm bg-primary/10 border border-primary/20"
-              style={{
-                left: barStart,
-                width: barWidth,
-                top: "50%",
-                transform: "translateY(-50%)",
-              }}
-            >
-              <span className="px-1.5 text-[10px] leading-5 text-primary truncate block">
-                {task.title}
-              </span>
-            </div>
-          )}
-        </div>
-      );
-    });
-  };
+      setDragState({ active: false, startCol: 0, currentCol: 0 });
+    },
+    [dragState, workdays, onDragCreate]
+  );
 
   // --- Loading state ---
-
   if (loading) {
     return <TimelineSkeleton />;
   }
 
   // --- Empty state ---
-
   if (!hasActiveProject) {
     return (
       <div className="flex flex-col h-full">
@@ -277,35 +308,31 @@ export function Timeline({
           </span>
         </div>
         <div className="flex-1 flex items-center justify-center">
-          <EmptyState />
+          <EmptyState onCreateProject={onCreateProject} />
         </div>
       </div>
     );
   }
 
-  // --- Main render ---
+  // Grid width
+  const gridWidth = workdays.length * COL_WIDTH;
 
+  // --- Main render ---
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Sticky header row: corner square + TimelineHeader */}
-      <div className="flex sticky top-0 z-30 flex-shrink-0">
-        <div
-          className="sticky left-0 z-20 bg-background border-r border-b border-border flex-shrink-0"
-          style={{ width: "var(--sidebar-width)", height: 0 }}
-        />
-        <div className="flex-1 overflow-hidden">
-          <TimelineHeader workdays={workdays} today={today} />
-        </div>
-      </div>
-
       {/* Body: sticky left column + scrollable grid */}
       <div className="flex flex-1 overflow-hidden">
+        {/* Description column */}
         <DescriptionColumn
           labels={labels}
           collapsedIds={collapsedIds}
           onToggleCollapse={(id) => onToggleCollapse?.(id)}
+          onAddSubtask={onAddSubtask}
+          onEditTask={onEditTask}
+          onDeleteTask={onDeleteTask}
         />
 
+        {/* Scrollable timeline area */}
         <div
           ref={bodyRef}
           className="overflow-auto flex-1"
@@ -314,23 +341,168 @@ export function Timeline({
         >
           <div
             ref={timelineGridRef}
-            className="relative"
-            style={{ minWidth: workdays.length * 40 }}
+            className="relative select-none"
+            style={{ width: gridWidth, minHeight: contentHeight }}
+            onPointerDown={handleGridPointerDown}
+            onPointerMove={handleGridPointerMove}
+            onPointerUp={handleGridPointerUp}
           >
-            {/* Spacer to push rows below the sticky header */}
-            <div style={{ height: 37 }} />
+            {/* === Sticky header === */}
+            <div className="sticky top-0 z-30">
+              <TimelineHeader workdays={workdays} today={today} />
+            </div>
 
-            {/* Today vertical line */}
-            {renderTodayLine()}
+            {/* === Grid lines (absolute, full height, behind everything) === */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{ top: HEADER_HEIGHT }}
+            >
+              {workdays.map((date, i) => {
+                const isBoundary = monthBoundarySet.has(i);
+                return (
+                  <div
+                    key={date}
+                    className="absolute top-0 bottom-0"
+                    style={{
+                      left: i * COL_WIDTH + COL_WIDTH - 1,
+                      width: 1,
+                      backgroundColor: isBoundary
+                        ? "var(--border)"
+                        : "color-mix(in srgb, var(--border) 30%, transparent)",
+                    }}
+                  />
+                );
+              })}
+            </div>
 
-            {/* Month boundary + grid lines */}
-            {renderGridLines()}
+            {/* === Today vertical line === */}
+            {todayColIndex !== -1 && (
+              <div
+                data-today-col="true"
+                className="absolute bottom-0 w-0.5 pointer-events-none z-[5]"
+                style={{
+                  left: todayColIndex * COL_WIDTH + COL_WIDTH / 2,
+                  top: HEADER_HEIGHT,
+                  background: "var(--accent)",
+                  opacity: 0.6,
+                  boxShadow: "0 0 6px rgba(59, 130, 246, 0.3)",
+                }}
+              />
+            )}
 
-            {/* Task rows */}
-            <div className="relative">{renderTaskRows()}</div>
+            {/* === Drag selection rectangle === */}
+            {dragState.active && (() => {
+              const s = Math.min(dragState.startCol, dragState.currentCol);
+              const e = Math.max(dragState.startCol, dragState.currentCol);
+              const w = (e - s + 1) * COL_WIDTH;
+              if (w <= COL_WIDTH) return null;
+              return (
+                <div
+                  className="absolute pointer-events-none z-10 rounded-sm"
+                  style={{
+                    left: s * COL_WIDTH,
+                    width: w,
+                    top: HEADER_HEIGHT,
+                    bottom: 0,
+                    background: "rgba(99, 102, 241, 0.08)",
+                    border: "1px dashed rgba(99, 102, 241, 0.4)",
+                  }}
+                />
+              );
+            })()}
+
+            {/* === Task rows === */}
+            <div style={{ position: "relative", zIndex: 1 }}>
+              {tasks.length === 0 ? (
+                <div
+                  className="flex flex-col items-center justify-center text-xs text-muted-foreground py-12 gap-2"
+                  style={{ width: gridWidth }}
+                >
+                  <span className="text-sm font-medium">No tasks scheduled yet</span>
+                  <span className="text-muted-foreground/70">
+                    Click &quot;Add Task&quot; above or drag across the timeline to create one
+                  </span>
+                </div>
+              ) : (
+                tasks.map((task) => {
+                  const startCol = getTaskStartCol(task, workdays);
+                  const endCol = getTaskEndCol(task, workdays);
+                  const depthColor = getDepthColor(task.depth);
+
+                  let barStart = 0;
+                  let barWidth = 0;
+                  if (startCol !== -1 && endCol !== -1 && startCol < workdays.length && endCol > 0) {
+                    const clampedStart = Math.max(0, startCol);
+                    const clampedEnd = Math.min(workdays.length, endCol);
+                    barStart = clampedStart * COL_WIDTH;
+                    barWidth = Math.max(4, (clampedEnd - clampedStart) * COL_WIDTH);
+                  }
+
+                  return (
+                    <div
+                      key={task.id}
+                      className="relative border-b border-border/40"
+                      style={{
+                        height: "var(--cell-height)",
+                        width: gridWidth,
+                      }}
+                    >
+                      {barWidth > 0 && (
+                        <div
+                          data-task-bar="true"
+                          className="absolute h-6 rounded-md cursor-pointer transition-all duration-100 hover:brightness-110 hover:shadow-md hover:z-10"
+                          style={{
+                            left: barStart,
+                            width: barWidth,
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            backgroundColor: depthColor.bg,
+                            borderWidth: 1,
+                            borderStyle: "solid",
+                            borderColor: depthColor.border,
+                          }}
+                          onContextMenu={(e) =>
+                            handleTaskContextMenu(e, task.id, task.title)
+                          }
+                          onDoubleClick={() => handleTaskDoubleClick(task.id)}
+                          title={`${task.title}${task.start ? `\n${task.start} → ${task.end}` : ""}\nDouble-click to edit · Right-click for options`}
+                        >
+                          <div
+                            className="absolute inset-x-0 top-0 h-1/2 rounded-t-md pointer-events-none"
+                            style={{
+                              background: "linear-gradient(to bottom, rgba(255,255,255,0.15), transparent)",
+                            }}
+                          />
+                          <span
+                            className="px-1.5 text-[10px] leading-6 font-medium truncate block select-none"
+                            style={{ color: depthColor.text }}
+                          >
+                            {task.title}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Task context menu */}
+      <TaskContextMenu
+        open={contextMenu.open}
+        onOpenChange={(open) =>
+          setContextMenu((prev) => ({ ...prev, open }))
+        }
+        position={contextMenu.position}
+        taskId={contextMenu.taskId}
+        taskTitle={contextMenu.taskTitle}
+        onAddSubtask={(id) => onAddSubtask?.(id)}
+        onEditTask={(id) => onEditTask?.(id)}
+        onDeleteTask={(id) => onDeleteTask?.(id)}
+      />
     </div>
   );
 }

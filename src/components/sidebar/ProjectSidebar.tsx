@@ -6,23 +6,19 @@ import { Button } from "@/components/ui/button";
 import { PartyLegend } from "@/components/sidebar/PartyLegend";
 import { ProjectListItem } from "@/components/sidebar/ProjectListItem";
 import { NewProjectDialog } from "@/components/dialogs/NewProjectDialog";
-import { useStore } from "@/lib/store";
+import { useProjects, useActiveProjectId, useParties, useStore } from "@/lib/store";
 
 export function ProjectSidebar() {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // Store data
-  const projects = useStore((s) => s.projects);
-  const activeProjectId = useStore((s) => s.activeProjectId);
-  const tasks = useStore((s) => s.tasks);
-  const parties = useStore((s) => s.parties);
+  const projects = useProjects();
+  const activeProjectId = useActiveProjectId();
+  const activeParties = useParties(activeProjectId ?? "");
   const switchProject = useStore((s) => s.switchProject);
 
   const activeProject = projects.find((p) => p.id === activeProjectId);
   const otherProjects = projects.filter((p) => p.id !== activeProjectId);
-  const activeParties = parties.filter(
-    (p) => p.projectId === activeProjectId
-  );
 
   const handleDialogOpenChange = useCallback((open: boolean) => {
     setDialogOpen(open);

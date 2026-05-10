@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 import { temporal } from 'zundo';
 import { nanoid } from 'nanoid';
 import type {
@@ -507,15 +508,15 @@ export const useStore = create<SchedulerState>()(
 export const useProjects = () => useStore((s) => s.projects);
 
 export const useParties = (projectId: string) =>
-  useStore((s) => s.parties.filter((p) => p.projectId === projectId));
+  useStore(useShallow((s) => s.parties.filter((p) => p.projectId === projectId)));
 
 export const useTasks = (projectId: string) =>
-  useStore((s) => s.tasks.filter((t) => t.projectId === projectId));
+  useStore(useShallow((s) => s.tasks.filter((t) => t.projectId === projectId)));
 
 export const useCalendarEvents = () => useStore((s) => s.calendarEvents);
 
 export const useMeetings = (projectId: string) =>
-  useStore((s) => s.meetings.filter((m) => m.projectId === projectId));
+  useStore(useShallow((s) => s.meetings.filter((m) => m.projectId === projectId)));
 
 export const useSettings = () => useStore((s) => s.settings);
 

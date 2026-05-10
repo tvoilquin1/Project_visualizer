@@ -70,8 +70,11 @@ export function TimelineHeader({ workdays, today }: TimelineHeaderProps) {
       <div className="flex h-8 border-b border-border" role="row" style={{ width: workdays.length * 40 }}>
         {workdays.map((date) => {
           const isToday = date === today;
-          const dayName = format(new Date(date), "EEE");
-          const dayNum = format(new Date(date), "d");
+          // Parse as local date to avoid UTC timezone shift
+          const [y, m, d] = date.split("-").map(Number);
+          const localDate = new Date(y!, m! - 1, d!);
+          const dayName = format(localDate, "EEE");
+          const dayNum = format(localDate, "d");
           return (
             <div
               key={date}
