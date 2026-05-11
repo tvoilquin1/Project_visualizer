@@ -18,6 +18,8 @@ import {
 } from "@/lib/store";
 import { generateLabels } from "@/lib/labels";
 import type { TaskLabel } from "@/components/scheduler/DescriptionColumn";
+import type { DateSegment } from "@/components/scheduler/Timeline";
+import { nextWorkday } from "@/lib/workdays";
 
 export default function Home() {
   const activeProjectId = useActiveProjectId();
@@ -146,15 +148,84 @@ export default function Home() {
 
     walkTree(null);
 
-    // Also build flat tasks in the same order for timeline bars
-    const flatTasks = taskLabels.map((l) => ({
-      id: l.id,
-      title: l.title,
-      parentTaskId: l.parentTaskId,
-      depth: l.depth,
-      start: tasks.find((t) => t.id === l.id)?.start ?? null,
-      end: tasks.find((t) => t.id === l.id)?.end ?? null,
-    }));
+    // --- Segment computation (bottom-up) ---
+    // Merge overlapping/adjacent segments, keeping gaps for non-adjacent ones
+    function mergeSegments(segs: DateSegment[]): DateSegment[] {
+      if (segs.length === 0) return [];
+      const sorted = [...segs].sort((a, b) => a.start.localeCompare(b.start));
+      const merged: DateSegment[] = [{ ...sorted[0]! }];
+      for (let i = 1; i < sorted.length; i++) {
+        const last = merged[merged.length - 1]!;
+        const curr = sorted[i]!;
+        // Merge if overlapping or workday-adjacent (e.g. Fri → Mon)
+        if (curr.start <= last.end || curr.start <= nextWorkday(last.end)) {
+          if (curr.end > last.end) last.end = curr.end;
+        } else {
+          merged.push({ ...curr });
+        }
+      }
+      return merged;
+    }
+
+    // Build a lookup: taskId → set of direct children ids
+    const childrenOf = new Map<string, string[]>();
+    for (const t of tasks) {
+      const pid = t.parentTaskId ?? "__root__";
+      if (!childrenOf.has(pid)) childrenOf.set(pid, []);
+      childrenOf.get(pid)!.push(t.id);
+    }
+
+    // Process in reverse tree-order (leaves before parents)
+    const segmentMap = new Map<string, DateSegment[]>();
+    for (let i = taskLabels.length - 1; i >= 0; i--) {
+      const label = taskLabels[i]!;
+      const task = tasks.find((t) => t.id === label.id);
+      const kids = childrenOf.get(label.id) ?? [];
+
+      if (kids.length === 0) {
+        // Leaf task — use own dates
+        if (task?.start && task?.end) {
+          segmentMap.set(label.id, [{ start: task.start, end: task.end }]);
+        } else {
+          segmentMap.set(label.id, []);
+        }
+      } else {
+        // Parent task — aggregate children's segments
+        const allSegs: DateSegment[] = [];
+        for (const kidId of kids) {
+          const kidSegs = segmentMap.get(kidId) ?? [];
+          allSegs.push(...kidSegs);
+        }
+        let merged = mergeSegments(allSegs);
+
+        // Clamp to parent's own date boundaries if specified
+        if (task?.start || task?.end) {
+          merged = merged
+            .map((seg) => ({
+              start: task?.start && seg.start < task.start ? task.start : seg.start,
+              end: task?.end && seg.end > task.end ? task.end : seg.end,
+            }))
+            .filter((seg) => seg.start <= seg.end);
+        }
+        segmentMap.set(label.id, merged);
+      }
+    }
+
+    // Build flat tasks with segments for Timeline
+    const flatTasks = taskLabels.map((l) => {
+      const task = tasks.find((t) => t.id === l.id);
+      const kids = childrenOf.get(l.id) ?? [];
+      return {
+        id: l.id,
+        title: l.title,
+        parentTaskId: l.parentTaskId,
+        depth: l.depth,
+        start: task?.start ?? null,
+        end: task?.end ?? null,
+        segments: segmentMap.get(l.id) ?? [],
+        isParent: kids.length > 0,
+      };
+    });
 
     return { labelMap, taskLabels, flatTasks };
   }, [tasks]);
@@ -202,18 +273,28 @@ export default function Home() {
       </div>
 
       {/* Add Task / Sub-task Dialog */}
-      {activeProjectId && (
-        <AddTaskDialog
-          open={addTaskOpen}
-          onOpenChange={setAddTaskOpen}
-          projectId={activeProjectId}
-          parties={parties}
-          tasks={allTasks}
-          parentTaskId={addSubtaskParentId}
-          defaultStart={dragCreateDates?.start}
-          defaultEnd={dragCreateDates?.end}
-        />
-      )}
+      {activeProjectId && (() => {
+        // Compute parent boundary if adding a subtask under a dated parent
+        const parentTask = addSubtaskParentId
+          ? allTasks.find((t) => t.id === addSubtaskParentId)
+          : null;
+        const parentBoundary = parentTask?.start || parentTask?.end
+          ? { start: parentTask.start ?? null, end: parentTask.end ?? null }
+          : null;
+        return (
+          <AddTaskDialog
+            open={addTaskOpen}
+            onOpenChange={setAddTaskOpen}
+            projectId={activeProjectId}
+            parties={parties}
+            tasks={allTasks}
+            parentTaskId={addSubtaskParentId}
+            defaultStart={dragCreateDates?.start}
+            defaultEnd={dragCreateDates?.end}
+            parentBoundary={parentBoundary}
+          />
+        );
+      })()}
 
       {/* Edit Task Dialog */}
       {activeProjectId && (

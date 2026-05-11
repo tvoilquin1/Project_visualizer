@@ -37,6 +37,8 @@ interface AddTaskDialogProps {
   /** Pre-set start/end dates (from drag-to-create) */
   defaultStart?: string | null;
   defaultEnd?: string | null;
+  /** Parent task date boundaries (subtask dates must fall within) */
+  parentBoundary?: { start: string | null; end: string | null } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -52,6 +54,7 @@ export function AddTaskDialog({
   parentTaskId: initialParentTaskId = null,
   defaultStart = null,
   defaultEnd = null,
+  parentBoundary = null,
 }: AddTaskDialogProps) {
   const createTask = useStore((s) => s.createTask);
 
@@ -99,6 +102,17 @@ export function AddTaskDialog({
     if (startDate && endDate && startDate > endDate) {
       setDateError("Start date must be before end date");
       return;
+    }
+    // Validate against parent boundaries
+    if (parentBoundary) {
+      if (parentBoundary.start && startDate && startDate < parentBoundary.start) {
+        setDateError(`Start can't be before parent boundary (${parentBoundary.start})`);
+        return;
+      }
+      if (parentBoundary.end && endDate && endDate > parentBoundary.end) {
+        setDateError(`End can't be after parent boundary (${parentBoundary.end})`);
+        return;
+      }
     }
     setDateError("");
 

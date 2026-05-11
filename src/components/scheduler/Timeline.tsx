@@ -15,6 +15,11 @@ import type { TaskLabel } from "@/components/scheduler/DescriptionColumn";
 // Types
 // ---------------------------------------------------------------------------
 
+export interface DateSegment {
+  start: ISODate;
+  end: ISODate;
+}
+
 export interface TimelineTask {
   id: string;
   title: string;
@@ -22,6 +27,10 @@ export interface TimelineTask {
   depth: number;
   start: ISODate | null;
   end: ISODate | null;
+  /** Computed bar segments (leaf = own range; parent = aggregate of children) */
+  segments: DateSegment[];
+  /** Whether this task has children */
+  isParent: boolean;
 }
 
 export interface TimelineProps {
@@ -50,11 +59,11 @@ export interface TimelineProps {
 // Constants
 // ---------------------------------------------------------------------------
 
-const WEEKS_BACK = 6;
-const WEEKS_FORWARD = 6;
-const SCROLL_THRESHOLD = 100; // px from edge to trigger load more
+const WEEKS_BACK = 1;
+const WEEKS_FORWARD = 8;
+const SCROLL_THRESHOLD = 100;
 const COL_WIDTH = 40;
-const HEADER_HEIGHT = 52; // TimelineHeader: h-5 (20px month row) + h-8 (32px day row)
+const HEADER_HEIGHT = 52;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -64,18 +73,16 @@ function todayISO(): ISODate {
   return format(new Date(), "yyyy-MM-dd");
 }
 
-function getTaskStartCol(task: TimelineTask, workdays: ISODate[]): number {
-  if (!task.start) return -1;
+function getSegColStart(seg: DateSegment, workdays: ISODate[]): number {
   for (let i = 0; i < workdays.length; i++) {
-    if (workdays[i]! >= task.start) return i;
+    if (workdays[i]! >= seg.start) return i;
   }
   return workdays.length;
 }
 
-function getTaskEndCol(task: TimelineTask, workdays: ISODate[]): number {
-  if (!task.end) return -1;
+function getSegColEnd(seg: DateSegment, workdays: ISODate[]): number {
   for (let i = 0; i < workdays.length; i++) {
-    if (workdays[i]! > task.end) return i;
+    if (workdays[i]! > seg.end) return i;
   }
   return workdays.length;
 }
@@ -145,13 +152,14 @@ export function Timeline({
   const bodyRef = useRef<HTMLDivElement>(null);
   const timelineGridRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to today on mount
+  // Scroll to previous workday (yesterday) on mount — left edge of viewport
   useEffect(() => {
-    const idx = workdays.indexOf(today);
+    const yesterday = prevWorkday(today);
+    const idx = workdays.indexOf(yesterday);
     if (idx !== -1 && bodyRef.current) {
       bodyRef.current.scrollTo({
-        left: Math.max(0, idx * COL_WIDTH - 200),
-        behavior: "smooth",
+        left: idx * COL_WIDTH,
+        behavior: "instant",
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -218,7 +226,6 @@ export function Timeline({
     return boundaries;
   }, [workdays]);
 
-  // Content height: header + all task rows (or minimum)
   const contentHeight = Math.max(200, HEADER_HEIGHT + tasks.length * 32);
 
   // --- Context menu handlers ---
@@ -314,8 +321,62 @@ export function Timeline({
     );
   }
 
-  // Grid width
   const gridWidth = workdays.length * COL_WIDTH;
+
+  // --- Render a single bar segment ---
+  function renderBarSegment(
+    task: TimelineTask,
+    seg: DateSegment,
+    segIdx: number,
+    depthColor: ReturnType<typeof getDepthColor>,
+  ) {
+    const startCol = getSegColStart(seg, workdays);
+    const endCol = getSegColEnd(seg, workdays);
+
+    if (startCol >= workdays.length || endCol <= 0) return null;
+
+    const clampedStart = Math.max(0, startCol);
+    const clampedEnd = Math.min(workdays.length, endCol);
+    const barLeft = clampedStart * COL_WIDTH;
+    const barW = Math.max(4, (clampedEnd - clampedStart) * COL_WIDTH);
+
+    return (
+      <div
+        key={`${task.id}-seg-${segIdx}`}
+        data-task-bar="true"
+        className="absolute h-6 rounded-md cursor-pointer transition-all duration-100 hover:brightness-110 hover:shadow-md hover:z-10"
+        style={{
+          left: barLeft,
+          width: barW,
+          top: "50%",
+          transform: "translateY(-50%)",
+          backgroundColor: depthColor.bg,
+          borderWidth: 1,
+          borderStyle: task.isParent ? "dashed" : "solid",
+          borderColor: depthColor.border,
+        }}
+        onContextMenu={(e) => handleTaskContextMenu(e, task.id, task.title)}
+        onDoubleClick={() => handleTaskDoubleClick(task.id)}
+        title={`${task.title}\n${seg.start} → ${seg.end}${task.isParent ? " (aggregate)" : ""}\nDouble-click to edit · Right-click for options`}
+      >
+        <div
+          className="absolute inset-x-0 top-0 h-1/2 rounded-t-md pointer-events-none"
+          style={{
+            background: "linear-gradient(to bottom, rgba(255,255,255,0.15), transparent)",
+          }}
+        />
+        {/* Show title only on first segment */}
+        {segIdx === 0 && (
+          <span
+            className="px-1.5 text-[10px] leading-6 font-medium truncate block select-none"
+            style={{ color: depthColor.text }}
+          >
+            {task.title}
+          </span>
+        )}
+      </div>
+    );
+  }
 
   // --- Main render ---
   return (
@@ -425,18 +486,7 @@ export function Timeline({
                 </div>
               ) : (
                 tasks.map((task) => {
-                  const startCol = getTaskStartCol(task, workdays);
-                  const endCol = getTaskEndCol(task, workdays);
                   const depthColor = getDepthColor(task.depth);
-
-                  let barStart = 0;
-                  let barWidth = 0;
-                  if (startCol !== -1 && endCol !== -1 && startCol < workdays.length && endCol > 0) {
-                    const clampedStart = Math.max(0, startCol);
-                    const clampedEnd = Math.min(workdays.length, endCol);
-                    barStart = clampedStart * COL_WIDTH;
-                    barWidth = Math.max(4, (clampedEnd - clampedStart) * COL_WIDTH);
-                  }
 
                   return (
                     <div
@@ -447,39 +497,8 @@ export function Timeline({
                         width: gridWidth,
                       }}
                     >
-                      {barWidth > 0 && (
-                        <div
-                          data-task-bar="true"
-                          className="absolute h-6 rounded-md cursor-pointer transition-all duration-100 hover:brightness-110 hover:shadow-md hover:z-10"
-                          style={{
-                            left: barStart,
-                            width: barWidth,
-                            top: "50%",
-                            transform: "translateY(-50%)",
-                            backgroundColor: depthColor.bg,
-                            borderWidth: 1,
-                            borderStyle: "solid",
-                            borderColor: depthColor.border,
-                          }}
-                          onContextMenu={(e) =>
-                            handleTaskContextMenu(e, task.id, task.title)
-                          }
-                          onDoubleClick={() => handleTaskDoubleClick(task.id)}
-                          title={`${task.title}${task.start ? `\n${task.start} → ${task.end}` : ""}\nDouble-click to edit · Right-click for options`}
-                        >
-                          <div
-                            className="absolute inset-x-0 top-0 h-1/2 rounded-t-md pointer-events-none"
-                            style={{
-                              background: "linear-gradient(to bottom, rgba(255,255,255,0.15), transparent)",
-                            }}
-                          />
-                          <span
-                            className="px-1.5 text-[10px] leading-6 font-medium truncate block select-none"
-                            style={{ color: depthColor.text }}
-                          >
-                            {task.title}
-                          </span>
-                        </div>
+                      {task.segments.map((seg, segIdx) =>
+                        renderBarSegment(task, seg, segIdx, depthColor)
                       )}
                     </div>
                   );
